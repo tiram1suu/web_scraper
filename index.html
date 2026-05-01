@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Мониторинг конкурентов | Анализ цен</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); }
+        .insight-card { background: #f0fdf4; border-left: 4px solid #22c55e; }
+        .warning-card { background: #fef2f2; border-left: 4px solid #ef4444; }
+        .recommendation-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2a5298;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-6 max-w-6xl">
+        <!-- Header -->
+        <div class="gradient-bg rounded-2xl p-6 text-white text-center mb-8 shadow-lg">
+            <h1 class="text-3xl md:text-4xl font-bold mb-2">📊 Мониторинг конкурентов</h1>
+            <p class="text-lg opacity-90">Анализ цен и контактов за 5 минут</p>
+        </div>
+
+        <!-- Режимы -->
+        <div class="flex flex-col sm:flex-row gap-3 mb-8 bg-white p-2 rounded-xl shadow">
+            <button id="quickModeBtn" class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-blue-600 text-white shadow">
+                ⚡ Быстрый анализ (1 клик)
+            </button>
+            <button id="advancedModeBtn" class="flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-gray-200 text-gray-700">
+                🔧 Расширенные настройки
+            </button>
+        </div>
+
+        <!-- Быстрый режим -->
+        <div id="quickMode" class="bg-white rounded-xl shadow-lg p-6 mb-8">
+            <div class="insight-card p-4 rounded-lg mb-6">
+                📌 <strong>Как работает:</strong> Добавьте 3-5 сайтов конкурентов → нажмите кнопку → получите анализ цен и рекомендации
+            </div>
+            
+            <h3 class="text-lg font-semibold mb-4">📝 Добавьте конкурентов</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Конкурент 1</label>
+                    <input type="text" id="comp1Name" placeholder="Название" class="w-full p-3 border rounded-lg mb-2">
+                    <input type="text" id="comp1Url" placeholder="https://example.com" class="w-full p-3 border rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Конкурент 2</label>
+                    <input type="text" id="comp2Name" placeholder="Название" class="w-full p-3 border rounded-lg mb-2">
+                    <input type="text" id="comp2Url" placeholder="https://example.com" class="w-full p-3 border rounded-lg">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-4 mb-6">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Конкурент 3</label>
+                    <input type="text" id="comp3Name" placeholder="Название" class="w-full p-3 border rounded-lg mb-2">
+                    <input type="text" id="comp3Url" placeholder="https://example.com" class="w-full p-3 border rounded-lg">
+                </div>
+            </div>
+            
+            <details class="text-sm text-gray-600 mb-6">
+                <summary class="cursor-pointer">📋 Примеры для теста</summary>
+                <div class="mt-3 p-3 bg-gray-100 rounded-lg">
+                    <code>Читай-город, https://www.chitai-gorod.ru<br>Буквоед, https://www.bookvoed.ru</code>
+                    <button onclick="fillExample()" class="block mt-2 text-blue-600 hover:underline">📎 Вставить пример</button>
+                </div>
+            </details>
+        </div>
+
+        <!-- Расширенный режим (скрыт) -->
+        <div id="advancedMode" class="bg-white rounded-xl shadow-lg p-6 mb-8 hidden">
+            <h3 class="text-lg font-semibold mb-4">📝 Список конкурентов</h3>
+            <div id="competitorsTable" class="mb-4"></div>
+            <button onclick="addRow()" class="text-blue-600 hover:underline mb-4">+ Добавить строку</button>
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-1">Задержка между запросами (сек)</label>
+                <input type="range" id="delaySlider" min="1" max="5" value="2" class="w-full">
+                <span id="delayValue" class="text-sm">2 сек</span>
+            </div>
+        </div>
+
+        <!-- Кнопка запуска -->
+        <button id="startBtn" class="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl text-lg transition-all shadow-lg mb-8">
+            🚀 НАЧАТЬ АНАЛИЗ
+        </button>
+
+        <!-- Загрузка -->
+        <div id="loading" class="hidden text-center py-8">
+            <div class="loading-spinner mx-auto mb-4"></div>
+            <p class="text-gray-600" id="loadingText">Сбор данных...</p>
+        </div>
+
+        <!-- Результаты -->
+        <div id="results" class="hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4">📊 Результаты анализа</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm" id="resultsTable">
+                        <thead class="bg-gray-100">
+                            <tr><th class="p-3 text-left">Компания</th><th class="p-3 text-left">Email</th><th class="p-3 text-left">Телефоны</th><th class="p-3 text-left">Ср. цена</th><th class="p-3 text-left">Статус</th></tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- График -->
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                <h3 class="text-xl font-bold mb-4">📈 Сравнение цен</h3>
+                <canvas id="priceChart" height="200"></canvas>
+            </div>
+
+            <!-- Аналитический вывод -->
+            <div id="analysisBlock" class="bg-white rounded-xl shadow-lg p-6 mb-8"></div>
+
+            <!-- Контакты -->
+            <div id="contactsBlock" class="bg-white rounded-xl shadow-lg p-6 mb-8 hidden">
+                <h3 class="text-xl font-bold mb-4">📞 Найденные контакты</h3>
+                <div id="contactsTable"></div>
+            </div>
+
+            <!-- Кнопка скачивания -->
+            <button id="downloadBtn" class="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all">
+                📥 Скачать Excel-отчет
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Моковые данные для демонстрации
+        let currentResults = [];
+
+        function fillExample() {
+            document.getElementById('comp1Name').value = 'Читай-город';
+            document.getElementById('comp1Url').value = 'https://www.chitai-gorod.ru';
+            document.getElementById('comp2Name').value = 'Буквоед';
+            document.getElementById('comp2Url').value = 'https://www.bookvoed.ru';
+            document.getElementById('comp3Name').value = 'Лабиринт';
+            document.getElementById('comp3Url').value = 'https://www.labirint.ru';
+        }
+
+        // Переключение режимов
+        document.getElementById('quickModeBtn').onclick = () => {
+            document.getElementById('quickMode').classList.remove('hidden');
+            document.getElementById('advancedMode').classList.add('hidden');
+            document.getElementById('quickModeBtn').className = 'flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-blue-600 text-white shadow';
+            document.getElementById('advancedModeBtn').className = 'flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-gray-200 text-gray-700';
+        };
+        
+        document.getElementById('advancedModeBtn').onclick = () => {
+            document.getElementById('quickMode').classList.add('hidden');
+            document.getElementById('advancedMode').classList.remove('hidden');
+            document.getElementById('advancedModeBtn').className = 'flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-blue-600 text-white shadow';
+            document.getElementById('quickModeBtn').className = 'flex-1 py-3 px-4 rounded-lg font-semibold transition-all bg-gray-200 text-gray-700';
+        };
+
+        // Задержка
+        const delaySlider = document.getElementById('delaySlider');
+        if (delaySlider) {
+            delaySlider.oninput = () => {
+                document.getElementById('delayValue').innerText = delaySlider.value + ' сек';
+            };
+        }
+
+        // Добавление строки в расширенном режиме
+        let rows = [{name: '', url: ''}];
+        function renderTable() {
+            const container = document.getElementById('competitorsTable');
+            if (!container) return;
+            container.innerHTML = '';
+            rows.forEach((row, idx) => {
+                const div = document.createElement('div');
+                div.className = 'grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 p-3 border rounded-lg';
+                div.innerHTML = `
+                    <input type="text" placeholder="Название" value="${row.name}" class="p-2 border rounded" data-idx="${idx}" data-field="name">
+                    <div class="flex gap-2">
+                        <input type="text" placeholder="URL" value="${row.url}" class="flex-1 p-2 border rounded" data-idx="${idx}" data-field="url">
+                        <button onclick="removeRow(${idx})" class="bg-red-500 text-white px-3 rounded">✕</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            document.querySelectorAll('[data-field]').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    const field = e.target.dataset.field;
+                    rows[idx][field] = e.target.value;
+                });
+            });
+        }
+        
+        window.addRow = () => {
+            rows.push({name: '', url: ''});
+            renderTable();
+        };
+        
+        window.removeRow = (idx) => {
+            rows.splice(idx, 1);
+            renderTable();
+        };
+        renderTable();
+
+        // Симуляция сбора данных (демо)
+        document.getElementById('startBtn').onclick = async () => {
+            const loading = document.getElementById('loading');
+            const resultsDiv = document.getElementById('results');
+            loading.classList.remove('hidden');
+            resultsDiv.classList.add('hidden');
+            
+            // Сбор данных из формы
+            let competitors = [];
+            const isQuick = !document.getElementById('advancedMode').classList.contains('hidden');
+            
+            if (isQuick) {
+                for (let i = 1; i <= 3; i++) {
+                    const name = document.getElementById(`comp${i}Name`).value;
+                    const url = document.getElementById(`comp${i}Url`).value;
+                    if (name && url) competitors.push({name, url});
+                }
+            } else {
+                competitors = rows.filter(r => r.name && r.url);
+            }
+            
+            if (competitors.length === 0) {
+                alert('Добавьте хотя бы одного конкурента');
+                loading.classList.add('hidden');
+                return;
+            }
+            
+            // Симуляция задержки
+            await new Promise(r => setTimeout(r, 2000));
+            
+            // Генерация демо-данных
+            currentResults = competitors.map((comp, idx) => ({
+                company_name: comp.name,
+                website: comp.url,
+                emails: idx === 0 ? 'info@example.com, sales@example.com' : (idx === 1 ? 'contact@test.ru' : 'Не найдены'),
+                phones: idx === 0 ? '+7 495 123-45-67' : (idx === 1 ? '8 800 555-35-35' : 'Не найдены'),
+                min_price: [500, 750, 1200][idx % 3],
+                avg_price: [750, 1200, 1800][idx % 3],
+                max_price: [1000, 1500, 2500][idx % 3],
+                prices_list: '500₽, 750₽, 1000₽',
+                status: '✅ Успешно'
+            }));
+            
+            loading.classList.add('hidden');
+            displayResults(currentResults);
+        };
+        
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            const tbody = document.getElementById('resultsBody');
+            tbody.innerHTML = '';
+            
+            results.forEach(r => {
+                const row = tbody.insertRow();
+                row.insertCell(0).innerHTML = `<strong>${r.company_name}</strong><br><small class="text-gray-500">${r.website}</small>`;
+                row.insertCell(1).innerHTML = r.emails;
+                row.insertCell(2).innerHTML = r.phones;
+                row.insertCell(3).innerHTML = r.avg_price ? `${r.avg_price} ₽` : '—';
+                row.insertCell(4).innerHTML = `<span class="text-green-600">${r.status}</span>`;
+            });
+            
+            // График
+            const priceData = results.filter(r => r.avg_price);
+            if (priceData.length > 0) {
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: priceData.map(r => r.company_name),
+                        datasets: [{
+                            label: 'Средняя цена (₽)',
+                            data: priceData.map(r => r.avg_price),
+                            backgroundColor: '#2a5298',
+                            borderRadius: 8
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: true }
+                });
+            }
+            
+            // Аналитический блок
+            const avgPrice = priceData.reduce((s, r) => s + r.avg_price, 0) / priceData.length;
+            const minComp = priceData.reduce((a, b) => a.avg_price < b.avg_price ? a : b);
+            const maxComp = priceData.reduce((a, b) => a.avg_price > b.avg_price ? a : b);
+            
+            const analysisHtml = `
+                <div class="recommendation-card text-white p-6 rounded-xl mb-6">
+                    <h3 class="text-xl font-bold mb-4">🧠 Что показал анализ</h3>
+                    <ul class="space-y-2 text-lg">
+                        <li>💰 <strong>Средняя цена на рынке:</strong> ${avgPrice.toFixed(0)} ₽</li>
+                        <li>📉 <strong>Самый дешёвый:</strong> ${minComp.company_name} (${minComp.avg_price} ₽)</li>
+                        <li>📈 <strong>Самый дорогой:</strong> ${maxComp.company_name} (${maxComp.avg_price} ₽)</li>
+                    </ul>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="insight-card p-4 rounded-lg">
+                        <strong>🎯 Рекомендуемая цена:</strong><br>
+                        <span class="text-2xl font-bold">${Math.round(avgPrice * 0.9)} – ${Math.round(avgPrice * 1.1)} ₽</span>
+                    </div>
+                    <div class="insight-card p-4 rounded-lg">
+                        <strong>📌 Позиционирование:</strong><br>
+                        ${avgPrice < 5000 ? 'Масс-маркет сегмент' : (avgPrice < 20000 ? 'Средний ценовой сегмент' : 'Премиум сегмент')}
+                    </div>
+                </div>
+                <div class="recommendation-card text-white p-6 rounded-xl mt-4">
+                    <strong>🚀 Стратегическая рекомендация:</strong><br>
+                    • Если вы новичок — стартуйте на 5-10% ниже рынка<br>
+                    • Если у вас уникальное преимущество — цена может быть выше<br>
+                    • Регулярно обновляйте анализ (раз в 1-2 месяца)
+                </div>
+            `;
+            document.getElementById('analysisBlock').innerHTML = analysisHtml;
+            
+            // Контакты
+            const contacts = results.filter(r => r.emails !== 'Не найдены');
+            if (contacts.length > 0) {
+                document.getElementById('contactsBlock').classList.remove('hidden');
+                let contactsHtml = '<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-100"><tr><th class="p-2">Компания</th><th class="p-2">Email</th><th class="p-2">Телефон</th></tr></thead><tbody>';
+                contacts.forEach(c => {
+                    contactsHtml += `<tr><td class="p-2">${c.company_name}</td><td class="p-2">${c.emails}</td><td class="p-2">${c.phones}</td></tr>`;
+                });
+                contactsHtml += '</tbody></table></div>';
+                document.getElementById('contactsTable').innerHTML = contactsHtml;
+            }
+            
+            resultsDiv.classList.remove('hidden');
+            window.scrollTo({ top: resultsDiv.offsetTop, behavior: 'smooth' });
+        }
+        
+        document.getElementById('downloadBtn').onclick = () => {
+            if (!currentResults.length) return;
+            let csv = 'Компания,Сайт,Email,Телефоны,Ср.цена\n';
+            currentResults.forEach(r => {
+                csv += `"${r.company_name}","${r.website}","${r.emails}","${r.phones}",${r.avg_price || ''}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `competitor_analysis_${new Date().toISOString().slice(0,19)}.csv`;
+            link.click();
+        };
+    </script>
+</body>
+</html>
